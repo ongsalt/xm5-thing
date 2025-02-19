@@ -1,5 +1,5 @@
 [package]
-name = "bluetooth-thing"
+name = "xm5-thing"
 version = "0.1.0"
 edition = "2021"
 

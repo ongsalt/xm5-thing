@@ -1,22 +1,32 @@
+use std::ffi::{CStr, CString};
+
 use windows::{
     core::{GUID, PCSTR},
     Win32::{
         Devices::Bluetooth::BLUETOOTH_DEVICE_INFO,
-        System::Rpc::UuidFromStringA,
+        System::Rpc::{UuidFromStringA, RPC_S_INVALID_STRING_UUID},
     },
 };
 
 use crate::bluetooth::{BluetoothDeviceInfo, MacAddress};
 
-// todo: cache this
-pub fn to_guid(guid_str: &'static str) -> GUID {
+// why tf is this failing
+pub fn to_guid(guid_str: &str) -> Result<GUID, ()> {
     let mut guid = GUID {
         ..Default::default()
     };
+    let c_string = CString::new(guid_str).expect("guid should not contain null");
+    let ptr = PCSTR::from_raw(c_string.as_ptr() as *const u8);
+
     unsafe {
-        let _ = UuidFromStringA(PCSTR::from_raw(guid_str.as_ptr()), &mut guid);
+        let rpc_status = UuidFromStringA(ptr, &mut guid);
+        if rpc_status == RPC_S_INVALID_STRING_UUID {
+            eprintln!("invalid guid_str {guid_str}, {guid:?}, {c_string:?}");
+            return Err(());
+        }
     }
-    guid
+
+    Ok(guid)
 }
 
 pub fn makeword(low: u8, high: u8) -> u16 {

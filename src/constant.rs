@@ -1,6 +1,9 @@
-pub const SERVICE_UUID: &str = "956C7B26-D49A-4BA8-B03F-B17D393CB6E2"; // serial hpc???
+pub const SONY_SOME_SERVICE_UUID: &str = "956C7B26-D49A-4BA8-B03F-B17D393CB6E2"; // serial hpc???
 pub const FAST_PAIR_SERVICE_UUID: &str = "df21fe2c-2515-4fdb-8886-f12c4d67927c";
 pub const RANDOM_SERVICE_UUID: &str = "df21fe2c-8990-1aaa-8886-f12c4d67927c";
+
+// idk why this number
+pub const AVRCP_SERVICE_UUID: &str = "0000110e-0000-1000-8000-00805f9b34fb";
 
 
 // df21fe2c-2515-4fdb-8886-f12c4d67927c is for fast pair

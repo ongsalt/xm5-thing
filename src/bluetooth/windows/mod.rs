@@ -1,6 +1,5 @@
 use super::traits::{BluetoothAdapter, ServiceHandler};
-use super::BluetoothDeviceInfo;
-use crate::constant::SERVICE_UUID;
+use super::{BluetoothDeviceInfo, Protocol};
 use std::mem;
 use winapi::{makeword, to_guid};
 use windows::Win32::Foundation::HANDLE;
@@ -18,23 +17,19 @@ mod winapi;
 pub struct WindowsBluetoothAdaptor {}
 
 impl WindowsBluetoothAdaptor {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new() -> Result<Self, ()> {
+        let mut wsa_data = WSADATA::default();
+        let result = unsafe { WSAStartup(makeword(2, 2), &mut wsa_data) };
+
+        if result == 0 {
+            Ok(Self {})
+        } else {
+            Err(())
+        }
     }
 }
 
 impl BluetoothAdapter for WindowsBluetoothAdaptor {
-    fn init(&mut self) -> Result<(), ()> {
-        let mut wsa_data = WSADATA::default();
-        unsafe {
-            let result = WSAStartup(makeword(2, 2), &mut wsa_data);
-            if result == 0 {
-                Ok(())
-            } else {
-                Err(())
-            }
-        }    
-    }
     fn list_connected_devices(&self) -> Vec<BluetoothDeviceInfo> {
         let mut devices = vec![];
         unsafe {
@@ -80,75 +75,56 @@ impl BluetoothAdapter for WindowsBluetoothAdaptor {
     }
 }
 
-
 pub struct WindowsServiceHandler {
     pub info: BluetoothDeviceInfo,
-    socket: Option<SOCKET>,
+    socket: SOCKET,
+    service_uuid: String,
 }
 
 impl WindowsServiceHandler {
-    pub fn new(info: BluetoothDeviceInfo) -> Self {
-        Self {
-            info: info,
-            socket: None,
-        }
-    }
-}
+    pub fn new(
+        info: BluetoothDeviceInfo,
+        service_uuid: &str,
+        protocol: Protocol,
+    ) -> Result<Self, ()> {
+        let result = unsafe { socket(AF_BTH as i32, SOCK_STREAM, protocol.to_windows_enum() as i32) };
 
-impl ServiceHandler for WindowsServiceHandler {
-    fn init(&mut self) -> Result<(), ()> {
-        if self.initialized() {
-            return Err(());
-        }
-        let result = unsafe { socket(AF_BTH as i32, SOCK_STREAM, BTHPROTO_RFCOMM as i32) };
-        if let Ok(socket) = result {
-            self.socket = Some(socket);
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-
-    fn initialized(&self) -> bool {
-        self.socket.is_some()
-    }
-
-    fn connect(&mut self) -> Result<(), ()> {
-        if !self.initialized() {
-            return Err(());
-        }
-
-        let service_uuid = to_guid(&SERVICE_UUID);
+        let socket = match result {
+            Ok(socket) => socket,
+            Err(_) => return Err(()),
+        };
 
         unsafe {
             let sockaddr = SOCKADDR_BTH {
                 addressFamily: AF_BTH,
-                serviceClassId: service_uuid,
-                btAddr: (&self.info.address).into(),
+                serviceClassId: to_guid(service_uuid)?,
+                btAddr: (&info.address).into(),
                 port: 0,
             };
             let result = connect(
-                self.socket.unwrap(),
+                socket,
                 mem::transmute(&sockaddr),
                 mem::size_of::<SOCKADDR_BTH>() as i32,
             );
             if result != 0 {
-                eprintln!("[b_connect] {:?}", WSAGetLastError());
+                eprintln!("[connect] {:?}", WSAGetLastError());
                 return Err(());
             }
         };
 
-        Ok(())
+        Ok(Self {
+            info,
+            socket,
+            service_uuid: service_uuid.into(),
+        })
     }
+}
 
+impl ServiceHandler for WindowsServiceHandler {
     // TODO: handle error
     fn receive(&mut self, buffer: &mut [u8]) -> Result<usize, ()> {
-        if self.socket.is_none() {
-            return Err(());
-        }
-        let socket = self.socket.unwrap();
         unsafe {
-            let lenght = recv(socket, buffer, SEND_RECV_FLAGS::default());
+            let lenght = recv(self.socket, buffer, SEND_RECV_FLAGS::default());
             if lenght == SOCKET_ERROR {
                 println!("Error receving. code: {:?}", WSAGetLastError());
                 Err(())
@@ -159,10 +135,8 @@ impl ServiceHandler for WindowsServiceHandler {
     }
 
     fn close(&mut self) {
-        if let Some(socket) = self.socket {
-            println!("Closing socket: {:?} for {}", socket, self.info);
-            unsafe { shutdown(socket, SD_BOTH) };
-        }
+        println!("Closing socket: {:?} for {}", self.socket, self.info);
+        unsafe { shutdown(self.socket, SD_BOTH) };
     }
 
     fn send(&mut self, buffer: &[u8]) -> Result<(), ()> {
