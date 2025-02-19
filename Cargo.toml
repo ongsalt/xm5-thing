@@ -4,11 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tokio = { version = "1", features = ["full"] }
 windows = { version = "0.59.0", features = [
+    "Foundation_Collections",
     "Win32_Foundation",
     "Win32_Devices_Bluetooth",
     "Win32_Devices",
     "Win32_Networking_WinSock",
     "Win32_System_Com",
     "Win32_System_Rpc",
+    "Devices",
+    "Devices_Enumeration",
+    "Devices_Bluetooth",
+    "Devices_Bluetooth_Rfcomm",
+    "Networking_Sockets",
+    "Storage_Streams"
 ] }
