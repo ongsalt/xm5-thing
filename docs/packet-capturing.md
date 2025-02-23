@@ -11,6 +11,9 @@
 
 ### Live capturing
 warning: this might break a lot
-1. do previous section step 1-5
+1. do step 1-5 from previous section
 2. open wireshark on your pc
 3. you should see `Android Bluetooth Btsoop...` under capture section. double click it.
+
+
+> if you dont see any packet you might need to connect to the bluetooth device after doing steps above 

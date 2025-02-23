@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use super::BluetoothDeviceInfo;
 
 pub trait BluetoothAdapter {
@@ -6,8 +8,8 @@ pub trait BluetoothAdapter {
 
 // gonna remove this beacuse i just realized that we cant interface with avrcp directly on windows
 pub trait ServiceHandler {
-    fn send(&mut self, buffer: &[u8]) -> Result<(), ()>;
-    fn receive(&mut self, buffer: &mut [u8]) -> Result<usize, ()>;
-    fn close(&mut self); // while cant i make drop consuming 
+    async fn send(&self, buffer: &[u8]) -> Result<()>;
+    async fn receive(&self, buffer: &mut [u8]) -> Result<usize>;
+    async fn close(&mut self); // while cant i make drop consuming 
 }
 

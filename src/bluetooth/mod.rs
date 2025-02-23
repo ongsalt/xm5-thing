@@ -1,9 +1,8 @@
 use std::fmt::Display;
 
-use ::windows::Win32::Devices::Bluetooth::{BTHPROTO_L2CAP, BTHPROTO_RFCOMM};
-
 pub mod traits;
 pub mod windows;
+pub mod utils;
 
 #[derive(Clone, Copy, Debug)]
 pub struct MacAddress([u8; 6]);
@@ -41,20 +40,5 @@ pub struct BluetoothDeviceInfo {
 impl Display for BluetoothDeviceInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} [{}]", self.name, self.address)
-    }
-}
-
-
-pub enum Protocol {
-    RFCOMM,
-    L2CAP
-}
-
-impl Protocol {
-    fn to_windows_enum(&self) -> u32 {
-        match self {
-            Protocol::RFCOMM => BTHPROTO_RFCOMM,
-            Protocol::L2CAP => BTHPROTO_L2CAP,
-        }
     }
 }
