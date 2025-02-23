@@ -5,6 +5,12 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
+freya = "0.2"
+# winit = "*"
+dioxus = { version = "0.5", features = [
+    "macro",
+    "hooks",
+], default-features = false }
 windows = { version = "0.59.0", features = [
     "Foundation_Collections",
     "Win32_Foundation",
@@ -18,5 +24,5 @@ windows = { version = "0.59.0", features = [
     "Devices_Bluetooth",
     "Devices_Bluetooth_Rfcomm",
     "Networking_Sockets",
-    "Storage_Streams"
+    "Storage_Streams",
 ] }

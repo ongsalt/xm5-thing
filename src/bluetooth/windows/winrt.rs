@@ -5,7 +5,7 @@ use windows::{
         Enumeration::DeviceInformation,
     },
     Networking::Sockets::StreamSocket,
-    Storage::Streams::{Buffer, DataReader},
+    Storage::Streams::{Buffer, DataReader, InputStreamOptions},
 };
 
 use crate::constant::SONY_SOME_SERVICE_UUID;
@@ -43,15 +43,21 @@ pub async fn shit() -> Result<(), ()> {
     let mut buffer = [0u8; 512];
     let input_stream = socket.InputStream().unwrap();
 
-    // TODO: handle midway connection closed 
+    // binding with async support is really god blessing
+    // TODO: handle midway connection closed
     let data_reader = DataReader::CreateDataReader(&input_stream).unwrap();
-    let size = data_reader.LoadAsync(64).unwrap().await.unwrap();
-    println!("size: {size}");
-    for i in 0..size {
-        buffer[i as usize] = data_reader.ReadByte().unwrap();
-    }
+    data_reader
+        .SetInputStreamOptions(InputStreamOptions::Partial)
+        .unwrap();
 
-    println!("{:?}", &buffer[0..size as usize]);
+    //
+    while let Ok(size) = data_reader.LoadAsync(64).unwrap().await {
+        for i in 0..size {
+            buffer[i as usize] = data_reader.ReadByte().unwrap();
+        }
+        
+        println!("size {size} {:?}", &buffer[0..size as usize]);
+    }
     Ok(())
 }
 
