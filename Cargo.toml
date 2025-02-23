@@ -13,12 +13,6 @@ dioxus = { version = "0.5", features = [
 ], default-features = false }
 windows = { version = "0.59.0", features = [
     "Foundation_Collections",
-    "Win32_Foundation",
-    "Win32_Devices_Bluetooth",
-    "Win32_Devices",
-    "Win32_Networking_WinSock",
-    "Win32_System_Com",
-    "Win32_System_Rpc",
     "Devices",
     "Devices_Enumeration",
     "Devices_Bluetooth",
@@ -26,3 +20,4 @@ windows = { version = "0.59.0", features = [
     "Networking_Sockets",
     "Storage_Streams",
 ] }
+anyhow = "1.0.96"

@@ -16,5 +16,4 @@ mod app;
 async fn main() { 
     // let mut app = App::new();
     // app.start();
-    winrt::shit().await.expect("bruh");
 }
