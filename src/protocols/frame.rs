@@ -3,7 +3,7 @@ use std::fmt::Display;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use tokio::sync::mpsc::Receiver;
 
-use crate::bluetooth::utils::U8ArrayExtension;
+use crate::platforms::utils::U8ArrayExtension;
 
 // from https://github.com/AndreasOlofsson/mdr-protocol
 

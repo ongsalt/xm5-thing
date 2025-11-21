@@ -1,5 +1,5 @@
 use super::traits::ServiceHandler;
-use crate::{bluetooth::utils::U8ArrayExtension, constant::SONY_SOME_SERVICE_UUID};
+use crate::{platforms::utils::U8ArrayExtension, constant::SONY_SOME_SERVICE_UUID};
 use anyhow::{bail, Ok, Result};
 use windows::{
     core::GUID,

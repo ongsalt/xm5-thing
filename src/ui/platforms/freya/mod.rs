@@ -4,6 +4,7 @@ mod spring;
 
 use app::app;
 use freya::launch::launch;
+use freya::{launch::launch_cfg, prelude::LaunchConfig};
 
 pub fn start() {
     start_inner()
@@ -11,7 +12,6 @@ pub fn start() {
 
 #[cfg(target_os = "windows")]
 fn start_inner() {
-    use freya::{launch::launch_cfg, prelude::LaunchConfig};
     use winit::platform::windows::{BackdropType, WindowAttributesExtWindows};
 
     launch_cfg(
@@ -22,8 +22,6 @@ fn start_inner() {
             .with_transparency(true)
             .with_window_attributes(|attr| attr.with_system_backdrop(BackdropType::MainWindow)),
     );
-
-    // launch(app);
 }
 
 #[cfg(not(target_os = "windows"))]

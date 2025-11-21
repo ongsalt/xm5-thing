@@ -5,12 +5,16 @@
 
 use crate::ui::platforms::freya::start;
 
-mod bluetooth;
+mod platforms;
 mod constant;
 mod protocols;
 mod ui;
 
 // #[tokio::main]
 fn main() {
+    // set up bluetooth based on platform?
+    
+    
+    // start ui based on platform?
     start();
 }

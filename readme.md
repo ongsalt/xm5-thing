@@ -7,6 +7,12 @@
 - parse mdr packet (a lot)
   -  probably gonna need some macro
 - `OptimisticValue<T : Copy>`
+- platform specific stuff
+  - launch on boot
+  - config path
+  - tray
+  - ipc (for integration with command palette)
+    - i saw vicinae do shit like `vicinae toggle` to communicate with the daemon
 - ~~learn to properly do dioxus ui~~
   - freya decided to nuke dioxus 😭😭😭😭 
 
