@@ -3,15 +3,14 @@
 //     windows_subsystem = "windows"
 // )]
 
+use crate::ui::platforms::freya::start;
+
 mod bluetooth;
 mod constant;
 mod protocols;
 mod ui;
 
-use ui::platforms::freya::app::App;
-
 // #[tokio::main]
 fn main() {
-    let mut app = App::new();
-    app.start();
+    start();
 }

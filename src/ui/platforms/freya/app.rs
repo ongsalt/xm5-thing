@@ -1,37 +1,92 @@
-use freya::launch::launch;
+use crate::{
+    bluetooth::{traits::ServiceHandler, utils::U8ArrayExtension, windows::WindowsServiceHandler},
+    constant::SONY_SOME_SERVICE_UUID,
+    protocols::frame::Frame,
+    ui::platforms::freya::components::code_block::{CodeBlock, CodeLine},
+};
+use chrono::Local;
+use freya::prelude::*;
+use futures::StreamExt;
 
-pub struct App {}
+// wtf did i just wrote
+pub fn app() -> Element {
+    println!("[root] Rerun");
+    let mut log: Signal<Vec<CodeLine>> = use_signal(|| vec![]);
+    let mut add_log = move |content: String| {
+        log.write()
+            .push(CodeLine::new(Local::now().to_string(), content));
+    };
 
-impl App {
-    pub fn new() -> App {
-        App {}
-    }
+    let mut is_initialized = use_signal(|| false);
 
-    pub fn start(&mut self) {
-        self.start_ui();
-    }
+    let service: Coroutine<()> = use_coroutine(move |mut rx| async move {
+        let mut service: WindowsServiceHandler = WindowsServiceHandler::new(SONY_SOME_SERVICE_UUID)
+            .await
+            .unwrap();
+        *is_initialized.write() = true;
+        add_log("Initiliazed client".into());
 
-    #[cfg(target_os = "windows")]
-    pub fn start_ui(&self) {
-        use freya::{launch::launch_cfg, prelude::LaunchConfig};
-        use winit::platform::windows::{BackdropType, WindowAttributesExtWindows};
+        let service_rx = service.receive_rx().unwrap();
 
-        use crate::ui::platforms::freya::app;
+        spawn(async move {
+            let mut frames = Frame::from_byte_stream(service_rx);
+            while let Some(p) = frames.recv().await {
+                let Ok(frame) = p else {
+                    continue;
+                };
 
-        launch_cfg(
-            app,
-            LaunchConfig::<()>::new()
-                // .with_size(320f64, 480f64)
-                .with_background("transparent")
-                .with_transparency(true)
-                .with_window_attributes(|attr| attr.with_system_backdrop(BackdropType::MainWindow)),
-        );
+                add_log(format!("{}", frame));
+                let ack: Frame = Frame::new_ack(frame.sequence_number);
+                let payload: Vec<u8> = (&ack).into();
+                add_log(format!("sent {}", payload.format_as_hex()));
+                service.send(&payload).await.unwrap();
+            }
+            println!("Done")
+        });
 
-        // launch(app);
-    }
+        while let Some(req) = rx.next().await {}
+    });
 
-    #[cfg(not(target_os = "windows"))]
-    pub fn start_ui(&self) {
-        launch(app); // Be aware that this will block the thread
-    }
+    rsx!(
+        ScrollView {
+            height: "100%",
+            width: "100%",
+            padding: "16",
+            spacing: "16",
+
+            label {
+                font_size: "24",
+
+                "Some stupid client"
+            }
+
+            if *is_initialized.read() {
+                rect {
+                    direction: "horizontal",
+                    spacing: "6",
+
+                    // Button {
+                    //     onpress: move |_| service.send(ServiceMessage::SendAck2),
+
+                    //     label {
+                    //         "Send ack 2"
+                    //     }
+                    // }
+
+                    // Button {
+                    //     onpress: move |_| service.send(ServiceMessage::SendAck),
+
+                    //     label {
+                    //         "Send ack"
+                    //     }
+                    // }
+                }
+            }
+
+            CodeBlock {
+                title: "Log",
+                code: log.read().clone(), // ??????
+            }
+        }
+    )
 }

@@ -1,114 +1,32 @@
-use std::{
-    ops::Deref,
-    time::{self, Instant, SystemTime},
-};
-
-use chrono::Local;
-use freya::prelude::*;
-
 pub mod app;
 mod components;
 mod spring;
 
-use components::code_block::{CodeBlock, CodeLine};
-use futures::StreamExt;
+use app::app;
+use freya::launch::launch;
 
-use crate::{
-    bluetooth::{traits::ServiceHandler, utils::U8ArrayExtension, windows::WindowsServiceHandler},
-    constant::SONY_SOME_SERVICE_UUID,
-    protocols::frame::{self, Frame},
-};
-
-enum ServiceMessage {
-    SendAck,
-    SendAck2,
+pub fn start() {
+    start_inner()
 }
 
-// wtf did i just wrote
-pub fn app() -> Element {
-    println!("[root] Rerun");
-    let mut log: Signal<Vec<CodeLine>> = use_signal(|| vec![]);
-    let mut add_log = move |content: String| {
-        log.write()
-            .push(CodeLine::new(Local::now().to_string(), content));
-    };
+#[cfg(target_os = "windows")]
+fn start_inner() {
+    use freya::{launch::launch_cfg, prelude::LaunchConfig};
+    use winit::platform::windows::{BackdropType, WindowAttributesExtWindows};
 
-    let mut is_initialized = use_signal(|| false);
+    launch_cfg(
+        app,
+        LaunchConfig::<()>::new()
+            // .with_size(320f64, 480f64)
+            .with_background("transparent")
+            .with_transparency(true)
+            .with_window_attributes(|attr| attr.with_system_backdrop(BackdropType::MainWindow)),
+    );
 
-    let service: Coroutine<ServiceMessage> = use_coroutine(move |mut rx| async move {
-        let mut service: WindowsServiceHandler = WindowsServiceHandler::new(SONY_SOME_SERVICE_UUID)
-            .await
-            .unwrap();
-        *is_initialized.write() = true;
-        add_log("Initiliazed client".into());
+    // launch(app);
+}
 
-        let service_rx = service.receive_rx().unwrap();
-
-        spawn(async move {
-            let mut frames = Frame::from_byte_stream(service_rx);
-            while let Some(p) = frames.recv().await {
-                let Ok(frame) = p else {
-                    continue;
-                };
-                
-                add_log(format!("{}", frame));
-                let ack: Frame= Frame::new_ack(frame.sequence_number);
-                let payload: Vec<u8> = (&ack).into();
-                add_log(format!("sent {}", payload.format_as_hex()));
-                service.send(&payload).await.unwrap();
-            }
-            println!("Done")
-        });
-
-        while let Some(req) = rx.next().await {
-            match req {
-                ServiceMessage::SendAck => {}
-                ServiceMessage::SendAck2 => {}
-                _ => {}
-            }
-        }
-    });
-
-    rsx!(
-        ScrollView {
-            height: "100%",
-            width: "100%",
-            padding: "16",
-            spacing: "16",
-
-            label {
-                font_size: "24",
-
-                "Some stupid client"
-            }
-
-            if *is_initialized.read() {
-                rect {
-                    direction: "horizontal",
-                    spacing: "6",
-
-                    Button {
-                        onpress: move |_| service.send(ServiceMessage::SendAck2),
-
-                        label {
-                            "Send ack 2"
-                        }
-                    }
-
-                    Button {
-                        onpress: move |_| service.send(ServiceMessage::SendAck),
-
-                        label {
-                            "Send ack"
-                        }
-                    }
-                }
-            }
-
-            CodeBlock {
-                title: "Log",
-                code: log.read().clone(), // ??????
-            }
-        }
-    )
+#[cfg(not(target_os = "windows"))]
+fn start_inner() {
+    launch(app);
 }
