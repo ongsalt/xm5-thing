@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
 freya = "0.3.0-rc.1"
 winit = "*"
 dioxus = { version = "0.5", features = [
@@ -19,6 +19,7 @@ windows = { version = "0.59.0", features = [
     "Devices_Bluetooth_Rfcomm",
     "Networking_Sockets",
     "Storage_Streams",
+    "Foundation_Diagnostics"
 ] }
 anyhow = "1.0.96"
 chrono = "0.4.39"

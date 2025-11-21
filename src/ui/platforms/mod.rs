@@ -1,2 +1,2 @@
-mod freya;
-mod winui;
+pub mod freya;
+pub mod win32;

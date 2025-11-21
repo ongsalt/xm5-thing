@@ -1,1 +1,1 @@
-mod platforms;
+pub mod platforms;

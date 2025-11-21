@@ -1,4 +1,3 @@
-use crate::ui::app;
 use freya::launch::launch;
 
 pub struct App {}
@@ -16,6 +15,9 @@ impl App {
     pub fn start_ui(&self) {
         use freya::{launch::launch_cfg, prelude::LaunchConfig};
         use winit::platform::windows::{BackdropType, WindowAttributesExtWindows};
+
+        use crate::ui::platforms::freya::app;
+
         launch_cfg(
             app,
             LaunchConfig::<()>::new()

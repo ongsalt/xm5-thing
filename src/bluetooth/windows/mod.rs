@@ -16,8 +16,8 @@ pub mod winrt;
 
 #[derive(Debug, Clone)]
 pub struct WindowsServiceHandler {
-    service: RfcommDeviceService,
-    data_reader: DataReader,
+    pub service: RfcommDeviceService,
+    pub data_reader: DataReader,
     data_writer: DataWriter,
     socket: StreamSocket,
 }
@@ -70,15 +70,24 @@ impl ServiceHandler for WindowsServiceHandler {
         Ok(())
     }
 
-    async fn receive(&self, buffer: &mut [u8]) -> Result<usize> {
+    fn receive_rx(&self) -> Result<tokio::sync::mpsc::Receiver<u8>> {
         // should this block???
-        let size = self.data_reader.LoadAsync(buffer.len() as u32)?.await? as usize;
-        for i in 0..size {
-            buffer[i] = self.data_reader.ReadByte()?;
-        }
+        println!("Receive rx");
+        let (tx, rx) = tokio::sync::mpsc::channel(1024);
+        let data_reader = self.data_reader.clone();
 
-        println!("received {size}: [{}]", &buffer[0..size].format_as_hex());
-        Ok(size)
+        tokio::spawn(async move {
+            loop {
+                let size = data_reader.LoadAsync(512).unwrap().await.unwrap() as usize;
+                // println!("Got message size: {size}");
+                for _ in 0..size {
+                    tx.send(data_reader.ReadByte().unwrap()).await.unwrap();
+                }
+            }
+            println!("Done receive_rx");
+        });
+
+        Ok(rx)
     }
 
     async fn close(&mut self) {
