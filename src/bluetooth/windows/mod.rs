@@ -84,7 +84,6 @@ impl ServiceHandler for WindowsServiceHandler {
                     tx.send(data_reader.ReadByte().unwrap()).await.unwrap();
                 }
             }
-            println!("Done receive_rx");
         });
 
         Ok(rx)

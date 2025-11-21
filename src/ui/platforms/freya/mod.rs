@@ -30,7 +30,7 @@ pub fn app() -> Element {
     let mut log: Signal<Vec<CodeLine>> = use_signal(|| vec![]);
     let mut add_log = move |content: String| {
         log.write()
-            .push(CodeLine::new(Local::now().to_rfc2822(), content));
+            .push(CodeLine::new(Local::now().to_string(), content));
     };
 
     let mut is_initialized = use_signal(|| false);
@@ -42,19 +42,19 @@ pub fn app() -> Element {
         *is_initialized.write() = true;
         add_log("Initiliazed client".into());
 
-        let mut service_rx = service.receive_rx().unwrap();
+        let service_rx = service.receive_rx().unwrap();
 
         spawn(async move {
-            let mut packets = Frame::from_byte_stream(service_rx);
-            while let Some(p) = packets.recv().await {
-                let Ok(packet) = p else {
+            let mut frames = Frame::from_byte_stream(service_rx);
+            while let Some(p) = frames.recv().await {
+                let Ok(frame) = p else {
                     continue;
                 };
                 
-                add_log(format!("{:.?}", packet));
-                let ack= Frame::new_ack(packet.sequence_number);
+                add_log(format!("{}", frame));
+                let ack: Frame= Frame::new_ack(frame.sequence_number);
                 let payload: Vec<u8> = (&ack).into();
-                add_log(format!("send {:.?}", payload.format_as_hex()));
+                add_log(format!("sent {}", payload.format_as_hex()));
                 service.send(&payload).await.unwrap();
             }
             println!("Done")

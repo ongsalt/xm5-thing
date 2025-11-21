@@ -15,7 +15,5 @@ impl U8ArrayExtension for [u8] {
     
     fn format_as_hex_with_lenght(&self, lenght: usize) -> String {
         self[0..lenght].format_as_hex()
-    }
-
-    
+    }    
 }
