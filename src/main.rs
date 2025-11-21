@@ -3,7 +3,7 @@
 //     windows_subsystem = "windows"
 // )]
 
-use crate::ui::platforms::freya::start;
+use crate::ui::start;
 
 mod platforms;
 mod constant;
@@ -12,9 +12,12 @@ mod ui;
 
 // #[tokio::main]
 fn main() {
-    // set up bluetooth based on platform?
-    
-    
-    // start ui based on platform?
     start();
 }
+
+/* 
+Expected interface
+- start ui and init bt
+- ui: select device
+- query device info, we gonna have loading state (tanstack query lets goooo)
+*/

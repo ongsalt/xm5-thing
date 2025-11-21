@@ -15,4 +15,4 @@
     - i saw vicinae do shit like `vicinae toggle` to communicate with the daemon
 - ~~learn to properly do dioxus ui~~
   - freya decided to nuke dioxus 😭😭😭😭 
-
+  - im gonna use a web view if thing is really bad

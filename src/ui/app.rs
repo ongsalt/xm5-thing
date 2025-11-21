@@ -2,7 +2,7 @@ use crate::{
     platforms::{traits::ServiceHandler, utils::U8ArrayExtension, windows::WindowsServiceHandler},
     constant::SONY_SOME_SERVICE_UUID,
     protocols::frame::Frame,
-    ui::platforms::freya::components::code_block::{CodeBlock, CodeLine},
+    ui::components::code_block::{CodeBlock, CodeLine},
 };
 use chrono::Local;
 use freya::prelude::*;
