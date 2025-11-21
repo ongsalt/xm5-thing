@@ -1,17 +1,42 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::protocols::mdr::packet::ConnectedDeviecesRet;
+
 // TODO: find this
 #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
-enum MDRPacketType {
+pub enum MDRPacketType {
     ConnectedDeviecesGet = 0x36,
     ConnectedDeviecesRet = 0x37,
     MultipointPinningSet = 0x38,
     MultipointActiveDeviceSet = 0x3C,
 }
 
+pub enum MDRPacket {
+    ConnectedDeviecesGet(packet::ConnectedDeviecesGet),
+    ConnectedDeviecesRet(packet::ConnectedDeviecesRet),
+    MultipointPinningSet(packet::MultipointPinningSet),
+    MultipointActiveDeviceSet(packet::MultipointActiveDeviceSet),
+}
+
+impl TryFrom<&[u8]> for MDRPacket {
+    type Error = ();
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        // TODO: unwrap
+        let packet_type = MDRPacketType::try_from(value[0]).unwrap();
+
+        Ok(match packet_type {
+            MDRPacketType::ConnectedDeviecesRet => {
+                Self::ConnectedDeviecesRet(ConnectedDeviecesRet::try_from(value).unwrap())
+            }
+            _ => todo!(),
+        })
+    }
+}
+
 // this is for wh-1000xm5 only, at least for now
-mod packet {
+pub mod packet {
     use std::convert::TryFrom;
     use std::fmt;
 
