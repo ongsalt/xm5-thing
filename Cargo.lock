@@ -4422,9 +4422,7 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
- "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.52.0",
@@ -5624,7 +5622,6 @@ dependencies = [
  "dioxus 0.5.6",
  "freya",
  "futures",
- "tokio",
  "windows 0.59.0",
  "winit",
 ]
