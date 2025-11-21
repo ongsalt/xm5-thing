@@ -3,7 +3,8 @@ use freya::prelude::*;
 pub fn use_device_state() -> Coroutine<HeadphoneUICommand> {
     let mut device_state = use_signal(|| HeadphoneProperties::new());
 
-    // actor model as its finest
+    // actor model as its finest,
+    // this pretty much look like elm pattern tho
     let c: Coroutine<HeadphoneUICommand> = use_coroutine(move |rx| async move {
         let (mut tx, mut rx) = tokio::sync::mpsc::channel(512);
 
