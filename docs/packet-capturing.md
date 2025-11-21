@@ -1,4 +1,5 @@
 # Bluetooth packet capturing
+see [Gadgetbridge's docs](https://gadgetbridge.org/internals/development/bluetooth/)
 
 ## Using android devices
 1. turn on dev mode
