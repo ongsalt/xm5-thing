@@ -1,8 +1,7 @@
 use crate::{
     constant::SONY_SOME_SERVICE_UUID,
     platforms::{
-        traits::{DeviceCommunication, ServiceHandler},
-        utils::U8ArrayExtension,
+        traits::{DeviceCommunication},
         windows::WindowsDeviceCommunication,
     },
     protocols::frame::Frame,
@@ -42,7 +41,6 @@ pub fn app() -> Element {
                 add_log(format!("{}", frame));
                 let ack: Frame = Frame::new_ack(frame.sequence_number);
                 let payload: Vec<u8> = (&ack).into();
-                add_log(format!("sent {}", payload.format_as_hex()));
                 service_tx.send(payload).await.unwrap();
             }
             println!("Done")

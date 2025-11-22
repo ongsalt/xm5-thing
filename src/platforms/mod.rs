@@ -1,10 +1,12 @@
 use std::fmt::Display;
 
+use serde::Serialize;
+
 pub mod traits;
 pub mod windows;
 pub mod utils;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub struct MacAddress([u8; 6]);
 
 impl MacAddress {

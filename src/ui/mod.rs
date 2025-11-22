@@ -1,14 +1,18 @@
 pub mod app;
 mod components;
-mod spring;
 mod query;
+mod spring;
 mod state;
+mod terminal;
 
 use app::app;
 use freya::launch::launch;
 use freya::{launch::launch_cfg, prelude::LaunchConfig};
 
+use crate::ui::terminal::start_ratatui;
+
 pub fn start() {
+    // start_ratatui();
     start_inner()
 }
 

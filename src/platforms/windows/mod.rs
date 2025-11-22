@@ -1,5 +1,6 @@
 use crate::platforms::{traits::DeviceCommunication, utils::U8ArrayExtension};
 use anyhow::{bail, Ok, Result};
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 use windows::{
     core::GUID,
     Devices::{
@@ -61,24 +62,22 @@ impl WindowsDeviceCommunication {
 }
 
 impl DeviceCommunication for WindowsDeviceCommunication {
-    fn tx(&self) -> tokio::sync::mpsc::Sender<Vec<u8>> {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(24);
+    fn tx(&self) -> Sender<Vec<u8>> {
+        let (tx, mut rx) = channel::<Vec<u8>>(24);
         let data_writer = self.data_writer.clone();
 
         tokio::spawn(async move {
             while let Some(value) = rx.recv().await {
                 data_writer.WriteBytes(&value).unwrap();
                 data_writer.StoreAsync().unwrap().await.unwrap();
-                let left = data_writer.UnstoredBufferLength().unwrap();
-                println!("left: {left}");
             }
         });
 
         tx
     }
 
-    fn rx(&self) -> tokio::sync::mpsc::Receiver<Vec<u8>> {
-        let (tx, rx) = tokio::sync::mpsc::channel(24);
+    fn rx(&self) -> Receiver<Vec<u8>> {
+        let (tx, rx) = channel(24);
         let data_reader = self.data_reader.clone();
 
         tokio::spawn(async move {

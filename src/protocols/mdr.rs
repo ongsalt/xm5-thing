@@ -1,49 +1,313 @@
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::io::BufReader;
 
-use crate::protocols::mdr::packet::ConnectedDeviecesRet;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use tokio::sync::mpsc::Receiver;
+
+use crate::protocols::{frame::Frame, mdr::packet::ConnectedDeviecesRet};
 
 // TODO: find this
 #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum MDRPacketType {
+    ConnectGetProtocolInfo = 0x00,
+    ConnectRetProtocolInfo = 0x01,
+    ConnectGetCapabilityInfo = 0x02,
+    ConnectRetCapabilityInfo = 0x03,
+    ConnectGetDeviceInfo = 0x04,
+    ConnectRetDeviceInfo = 0x05,
+    ConnectGetSupportFunction = 0x06,
+    ConnectRetSupportFunction = 0x07,
+    CommonGetBatteryLevel = 0x10,
+    CommonRetBatteryLevel = 0x11,
+    CommonNtfyBatteryLevel = 0x13,
     ConnectedDeviecesGet = 0x36,
     ConnectedDeviecesRet = 0x37,
     MultipointPinningSet = 0x38,
     MultipointActiveDeviceSet = 0x3C,
 }
 
+#[derive(Debug, Clone)]
 pub enum MDRPacket {
+    ConnectGetProtocolInfo(packet::ConnectGetProtocolInfo),
+    ConnectRetProtocolInfo(packet::ConnectRetProtocolInfo),
+    ConnectGetCapabilityInfo(packet::ConnectGetCapabilityInfo),
+    ConnectRetCapabilityInfo(packet::ConnectRetCapabilityInfo),
+    ConnectGetDeviceInfo(packet::ConnectGetDeviceInfo),
+    ConnectRetDeviceInfo(packet::ConnectRetDeviceInfo),
+    ConnectGetSupportFunction(packet::ConnectGetSupportFunction),
+    ConnectRetSupportFunction(packet::ConnectRetSupportFunction),
+    CommonGetBatteryLevel(packet::CommonGetBatteryLevel),
+    CommonRetBatteryLevel(packet::CommonRetBatteryLevel),
+    CommonNtfyBatteryLevel(packet::CommonNtfyBatteryLevel),
     ConnectedDeviecesGet(packet::ConnectedDeviecesGet),
     ConnectedDeviecesRet(packet::ConnectedDeviecesRet),
     MultipointPinningSet(packet::MultipointPinningSet),
     MultipointActiveDeviceSet(packet::MultipointActiveDeviceSet),
 }
 
-impl TryFrom<&[u8]> for MDRPacket {
-    type Error = ();
+impl MDRPacket {
+    fn from_frame_stream(mut frame_rx: Receiver<Frame>) -> Receiver<MDRPacket> {
+        let (tx, rx) = tokio::sync::mpsc::channel(512);
+        tokio::spawn(async move {
+            while let Some(frame) = frame_rx.recv().await {
+                if frame.content.is_empty() {
+                    continue;
+                }
 
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        // TODO: unwrap
-        let packet_type = MDRPacketType::try_from(value[0]).unwrap();
+                let Ok(packet_type) = MDRPacketType::try_from(frame.content[0]) else {
+                    // dont close the stream, just ignore
+                    continue;
+                };
 
-        Ok(match packet_type {
-            MDRPacketType::ConnectedDeviecesRet => {
-                Self::ConnectedDeviecesRet(ConnectedDeviecesRet::try_from(value).unwrap())
+                let payload = &frame.content;
+                let packet: Result<MDRPacket, packet::PacketError> = match packet_type {
+                    MDRPacketType::ConnectRetProtocolInfo => {
+                        packet::ConnectRetProtocolInfo::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::ConnectRetProtocolInfo(p))
+                    }
+                    MDRPacketType::ConnectRetCapabilityInfo => {
+                        packet::ConnectRetCapabilityInfo::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::ConnectRetCapabilityInfo(p))
+                    }
+                    MDRPacketType::ConnectRetDeviceInfo => {
+                        packet::ConnectRetDeviceInfo::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::ConnectRetDeviceInfo(p))
+                    }
+                    MDRPacketType::ConnectRetSupportFunction => {
+                        packet::ConnectRetSupportFunction::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::ConnectRetSupportFunction(p))
+                    }
+                    MDRPacketType::CommonRetBatteryLevel => {
+                        packet::CommonRetBatteryLevel::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::CommonRetBatteryLevel(p))
+                    }
+                    MDRPacketType::CommonNtfyBatteryLevel => {
+                        packet::CommonNtfyBatteryLevel::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::CommonNtfyBatteryLevel(p))
+                    }
+                    MDRPacketType::ConnectedDeviecesRet => {
+                        packet::ConnectedDeviecesRet::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::ConnectedDeviecesRet(p))
+                    }
+                    MDRPacketType::MultipointActiveDeviceSet => {
+                        packet::MultipointActiveDeviceSet::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::MultipointActiveDeviceSet(p))
+                    }
+                    MDRPacketType::MultipointPinningSet => {
+                        packet::MultipointPinningSet::from_bytes(payload)
+                            .map(|(p, _)| MDRPacket::MultipointPinningSet(p))
+                    }
+                    _ => Err(packet::PacketError::UnimplementedPacketType(
+                        packet_type.into(),
+                    )),
+                };
+
+                match packet {
+                    Ok(p) => {
+                        if tx.send(p).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error parsing packet: {}", e);
+                    }
+                }
             }
-            _ => todo!(),
-        })
+            println!("Done (mdr) frame_rx.is_closed:{}", frame_rx.is_closed());
+        });
+
+        rx
     }
+
+    // we cant do this unless we have full table of mdr packet because size is unknown
+    // fn from_byte_stream(bytes_rx: Receiver<u8>) -> Receiver<MDRPacket> {
+    //     let (tx, rx) = tokio::sync::mpsc::channel(512);
+    //     tokio::spawn(async move {
+    //         let mut buffer: Vec<u8> = vec![];
+    //         let mut escape_next = false;
+    //         while let Some(byte) = bytes_rx.recv().await {
+    //             // print!("{:02x} ", byte);
+    //             match byte {
+    //             };
+    //         }
+    //         println!("Done (mdr) bytes_rx.is_closed:{}", bytes_rx.is_closed());
+    //     });
+
+    //     rx
+    // }
 }
 
 // this is for wh-1000xm5 only, at least for now
 pub mod packet {
-    use std::convert::TryFrom;
+    use num_enum::{IntoPrimitive, TryFromPrimitive};
     use std::fmt;
+
+    #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum DeviceInfoInquiredType {
+        ModelName = 0x01,
+        FwVersion = 0x02,
+        SeriesAndColorInfo = 0x03,
+        InstructionGuide = 0x04,
+    }
+
+    #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum ModelSeries {
+        NoSeries = 0x00,
+        ExtraBass = 0x10,
+        Hear = 0x20,
+        Premium = 0x30,
+        Sports = 0x40,
+        Casual = 0x50,
+    }
+
+    #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum ModelColor {
+        Default = 0x00,
+        Black = 0x01,
+        White = 0x02,
+        Silver = 0x03,
+        Red = 0x04,
+        Blue = 0x05,
+        Pink = 0x06,
+        Yellow = 0x07,
+        Green = 0x08,
+        Gray = 0x09,
+        Gold = 0x0a,
+        Cream = 0x0b,
+        Orange = 0x0c,
+        Brown = 0x0d,
+        Violet = 0x0e,
+    }
+
+    #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum BatteryInquiredType {
+        Battery = 0x00,
+        LeftRightBattery = 0x02,
+        CradleBattery = 0x03,
+    }
+
+    #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum FunctionType {
+        BatteryLevel = 0x11,
+        UpscalingIndicator = 0x12,
+        CodecIndicator = 0x13,
+        BleSetup = 0x14,
+        LeftRightBatteryLevel = 0x15,
+        LeftRightConnectionStatus = 0x17,
+        CradleBatteryLevel = 0x18,
+        PowerOff = 0x21,
+        ConciergeData = 0x22,
+        TandemKeepAlive = 0x23,
+        FwUpdate = 0x30,
+        PairingDeviceManagementClassicBt = 0x38,
+        VoiceGuidance = 0x39,
+        Vpt = 0x41,
+        SoundPosition = 0x42,
+        PresetEq = 0x51,
+        Ebb = 0x52,
+        PresetEqNoncustomizable = 0x53,
+        NoiseCancelling = 0x61,
+        NoiseCancellingAndAmbientSoundMode = 0x62,
+        AmbientSoundMode = 0x63,
+        AutoNcAsm = 0x71,
+        NcOptimizer = 0x81,
+        VibratorAlertNotification = 0x92,
+        PlaybackController = 0xa1,
+        TrainingMode = 0xb1,
+        ActionLogNotifier = 0xc1,
+        GeneralSetting1 = 0xd1,
+        GeneralSetting2 = 0xd2,
+        GeneralSetting3 = 0xd3,
+        ConnectionMode = 0xe1,
+        Upscaling = 0xe2,
+        Vibrator = 0xf1,
+        PowerSavingMode = 0xf2,
+        ControlByWearing = 0xf3,
+        SmartTalkingMode = 0xf5,
+        AutoPowerOff = 0xf4,
+        AssignableSettings = 0xf6,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ConnectGetProtocolInfo {
+        pub fixed: u8,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ConnectRetProtocolInfo {
+        pub protocol_version: u16,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ConnectGetCapabilityInfo {
+        pub fixed: u8,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ConnectRetCapabilityInfo {
+        pub capability_counter: u8,
+        pub uuid: String,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ConnectGetDeviceInfo {
+        pub inquired_type: DeviceInfoInquiredType,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum ConnectRetDeviceInfo {
+        ModelName(String),
+        FwVersion(String),
+        SeriesAndColorInfo(ModelSeries, ModelColor),
+        InstructionGuide(Vec<u8>),
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ConnectGetSupportFunction {
+        pub fixed: u8,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ConnectRetSupportFunction {
+        pub functions: Vec<FunctionType>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct CommonGetBatteryLevel {
+        pub inquired_type: BatteryInquiredType,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum CommonRetBatteryLevel {
+        Battery {
+            level: u8,
+            is_charging: bool,
+        },
+        LeftRightBattery {
+            left_level: u8,
+            left_charging: bool,
+            right_level: u8,
+            right_charging: bool,
+        },
+        CradleBattery {
+            level: u8,
+            is_charging: bool,
+        },
+    }
+
+    pub type CommonNtfyBatteryLevel = CommonRetBatteryLevel;
 
     #[derive(Debug)]
     pub enum PacketError {
         BufferTooShort,
         InvalidUtf8(std::string::FromUtf8Error),
+        UnimplementedPacketType(u8),
+        InvalidPacketBody(u8),
     }
 
     impl fmt::Display for PacketError {
@@ -51,6 +315,12 @@ pub mod packet {
             match self {
                 PacketError::BufferTooShort => write!(f, "Buffer too short"),
                 PacketError::InvalidUtf8(e) => write!(f, "Invalid UTF-8: {}", e),
+                PacketError::UnimplementedPacketType(t) => {
+                    write!(f, "Unimplemented packet type: 0x{:02x}", t)
+                }
+                PacketError::InvalidPacketBody(t) => {
+                    write!(f, "Invalid packet body for type: 0x{:02x}", t)
+                }
             }
         }
     }
@@ -63,68 +333,68 @@ pub mod packet {
         }
     }
 
+
+
     #[repr(C)]
+    #[derive(Debug, Clone)]
     pub struct ConnectedDeviecesGet {
         b1: u8, // 02???
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct ConnectedDeviecesRet {
         pub connected_count: u8,
         pub paired_count: u8,
         pub devices: Vec<ConnectedDevice>,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct MultipointActiveDeviceSet {
         pub flag1: u8,
         pub mac_address: String,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct MultipointPinningSet {
         // TODO: figure out what these bytes are
         pub payload: Vec<u8>,
     }
 
     // 17 bytes of mac addr string 💀💀💀 + 4 bytes flags + name.len() + name
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct ConnectedDevice {
         pub mac_address: String,
         pub flags: u32,
         pub name: String,
     }
 
-    impl TryFrom<&[u8]> for MultipointActiveDeviceSet {
-        type Error = PacketError;
-
-        fn try_from(payload: &[u8]) -> Result<Self, Self::Error> {
+    impl MultipointActiveDeviceSet {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
             if payload.len() < 19 {
                 return Err(PacketError::BufferTooShort);
             }
             let flag1 = payload[1];
-            let mac_address = String::from_utf8(payload[2..].to_vec())?;
-            Ok(MultipointActiveDeviceSet { flag1, mac_address })
+            let mac_address = String::from_utf8(payload[2..19].to_vec())?;
+            Ok((MultipointActiveDeviceSet { flag1, mac_address }, 19))
         }
     }
 
-    impl TryFrom<&[u8]> for MultipointPinningSet {
-        type Error = PacketError;
-
-        fn try_from(payload: &[u8]) -> Result<Self, Self::Error> {
+    impl MultipointPinningSet {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
             if payload.len() < 1 {
                 return Err(PacketError::BufferTooShort);
             }
-            Ok(MultipointPinningSet {
-                payload: payload[1..].to_vec(),
-            })
+            Ok((
+                MultipointPinningSet {
+                    payload: payload[1..].to_vec(),
+                },
+                payload.len(),
+            ))
         }
     }
 
-    impl TryFrom<&[u8]> for ConnectedDeviecesRet {
-        type Error = PacketError;
-
-        fn try_from(payload: &[u8]) -> Result<Self, Self::Error> {
+    impl ConnectedDeviecesRet {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
             if payload.len() < 3 {
                 return Err(PacketError::BufferTooShort);
             }
@@ -175,12 +445,174 @@ pub mod packet {
             // We don't know what they are yet, but we should probably consume them
             // or at least check if they exist to be safe.
             // For now, we just ignore them as per the python script which returns early.
+            if index + 3 <= payload.len() {
+                index += 3;
+            }
 
-            Ok(ConnectedDeviecesRet {
-                connected_count,
-                paired_count,
-                devices,
-            })
+            Ok((
+                ConnectedDeviecesRet {
+                    connected_count,
+                    paired_count,
+                    devices,
+                },
+                index,
+            ))
+        }
+    }
+
+    impl ConnectRetProtocolInfo {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
+            if payload.len() < 3 {
+                return Err(PacketError::BufferTooShort);
+            }
+            // payload[0] is fixed 0x00
+            let protocol_version = u16::from_be_bytes([payload[1], payload[2]]);
+            Ok((ConnectRetProtocolInfo { protocol_version }, 3))
+        }
+    }
+
+    impl ConnectRetCapabilityInfo {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
+            if payload.len() < 3 {
+                return Err(PacketError::BufferTooShort);
+            }
+            // payload[0] is fixed 0x00
+            let capability_counter = payload[1];
+            let uuid_len = payload[2] as usize;
+            if payload.len() < 3 + uuid_len {
+                return Err(PacketError::BufferTooShort);
+            }
+            let uuid = String::from_utf8(payload[3..3 + uuid_len].to_vec())?;
+            Ok((
+                ConnectRetCapabilityInfo {
+                    capability_counter,
+                    uuid,
+                },
+                3 + uuid_len,
+            ))
+        }
+    }
+
+    impl ConnectRetDeviceInfo {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
+            if payload.len() < 2 {
+                return Err(PacketError::BufferTooShort);
+            }
+            let inquired_type = DeviceInfoInquiredType::try_from(payload[0])
+                .map_err(|_| PacketError::InvalidPacketBody(payload[0]))?;
+
+            match inquired_type {
+                DeviceInfoInquiredType::ModelName => {
+                    let len = payload[1] as usize;
+                    if payload.len() < 2 + len {
+                        return Err(PacketError::BufferTooShort);
+                    }
+                    let name = String::from_utf8(payload[2..2 + len].to_vec())?;
+                    Ok((ConnectRetDeviceInfo::ModelName(name), 2 + len))
+                }
+                DeviceInfoInquiredType::FwVersion => {
+                    let len = payload[1] as usize;
+                    if payload.len() < 2 + len {
+                        return Err(PacketError::BufferTooShort);
+                    }
+                    let version = String::from_utf8(payload[2..2 + len].to_vec())?;
+                    Ok((ConnectRetDeviceInfo::FwVersion(version), 2 + len))
+                }
+                DeviceInfoInquiredType::SeriesAndColorInfo => {
+                    if payload.len() < 3 {
+                        return Err(PacketError::BufferTooShort);
+                    }
+                    let series = ModelSeries::try_from(payload[1])
+                        .map_err(|_| PacketError::InvalidPacketBody(payload[1]))?;
+                    let color = ModelColor::try_from(payload[2])
+                        .map_err(|_| PacketError::InvalidPacketBody(payload[2]))?;
+                    Ok((
+                        ConnectRetDeviceInfo::SeriesAndColorInfo(series, color),
+                        3,
+                    ))
+                }
+                DeviceInfoInquiredType::InstructionGuide => {
+                    let len = payload[1] as usize;
+                    if payload.len() < 2 + len {
+                        return Err(PacketError::BufferTooShort);
+                    }
+                    Ok((
+                        ConnectRetDeviceInfo::InstructionGuide(payload[2..2 + len].to_vec()),
+                        2 + len,
+                    ))
+                }
+            }
+        }
+    }
+
+    impl ConnectRetSupportFunction {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
+            if payload.len() < 2 {
+                return Err(PacketError::BufferTooShort);
+            }
+            // payload[0] is fixed 0x00
+            let count = payload[1] as usize;
+            if payload.len() < 2 + count {
+                return Err(PacketError::BufferTooShort);
+            }
+            let mut functions = Vec::with_capacity(count);
+            for i in 0..count {
+                if let Ok(func) = FunctionType::try_from(payload[2 + i]) {
+                    functions.push(func);
+                }
+            }
+            Ok((ConnectRetSupportFunction { functions }, 2 + count))
+        }
+    }
+
+    impl CommonRetBatteryLevel {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
+            if payload.len() < 1 {
+                return Err(PacketError::BufferTooShort);
+            }
+            let inquired_type = BatteryInquiredType::try_from(payload[0])
+                .map_err(|_| PacketError::InvalidPacketBody(payload[0]))?;
+
+            match inquired_type {
+                BatteryInquiredType::Battery => {
+                    if payload.len() < 3 {
+                        return Err(PacketError::BufferTooShort);
+                    }
+                    Ok((
+                        CommonRetBatteryLevel::Battery {
+                            level: payload[1],
+                            is_charging: payload[2] != 0,
+                        },
+                        3,
+                    ))
+                }
+                BatteryInquiredType::LeftRightBattery => {
+                    if payload.len() < 5 {
+                        return Err(PacketError::BufferTooShort);
+                    }
+                    Ok((
+                        CommonRetBatteryLevel::LeftRightBattery {
+                            left_level: payload[1],
+                            left_charging: payload[2] != 0,
+                            right_level: payload[3],
+                            right_charging: payload[4] != 0,
+                        },
+                        5,
+                    ))
+                }
+                BatteryInquiredType::CradleBattery => {
+                    if payload.len() < 3 {
+                        return Err(PacketError::BufferTooShort);
+                    }
+                    Ok((
+                        CommonRetBatteryLevel::CradleBattery {
+                            level: payload[1],
+                            is_charging: payload[2] != 0,
+                        },
+                        3,
+                    ))
+                }
+            }
         }
     }
 }

@@ -1,34 +1,60 @@
+use chrono::{DateTime, Utc};
 use freya::prelude::*;
 
-pub fn use_device_state() -> Coroutine<HeadphoneUICommand> {
-    let mut device_state = use_signal(|| HeadphoneProperties::new());
+use crate::{
+    platforms::{
+        traits::DeviceCommunication, windows::WindowsDeviceCommunication,
+    },
+    protocols::{
+        connection::{HeadphoneAppCommand, HeadphoneConnection},
+    },
+};
 
-    // actor model as its finest,
-    // this pretty much look like elm pattern tho
-    let c: Coroutine<HeadphoneUICommand> = use_coroutine(move |rx| async move {
-        let (mut tx, mut rx) = tokio::sync::mpsc::channel(512);
-
-        tokio::spawn(async move {
-            // put this in a callback and be done
-            tx.send(HeadphoneProperties::new()).await.unwrap();
-        });
-
-        while let Some(value) = rx.recv().await {
-            *device_state.write() = value;
-        }
-    });
-
-    c
+pub struct AppState<D: DeviceCommunication> {
+    connection: Option<HeadphoneConnection<D>>,
+    log: Vec<Log>,
 }
 
-pub struct HeadphoneUICommand {}
-
-pub struct HeadphoneProperties {}
-
-impl HeadphoneProperties {
+impl<D: DeviceCommunication> AppState<D> {
     fn new() -> Self {
-        Self {}
+        Self {
+            connection: None,
+            log: vec![],
+        }
     }
 }
 
-fn update_it_somehow(headphone_properties: &mut HeadphoneProperties) {}
+pub struct Log {
+    timestamp: DateTime<Utc>,
+    message: String,
+}
+
+pub fn use_app_state() -> (
+    Signal<AppState<WindowsDeviceCommunication>>,
+    Coroutine<HeadphoneAppCommand>,
+) {
+    let mut app_state = use_signal(|| AppState::<WindowsDeviceCommunication>::new());
+
+    // actor model as its finest,
+    // this pretty much look like elm pattern tho
+    let c: Coroutine<HeadphoneAppCommand> = use_coroutine(move |command_rx| async move {
+        let (mut tx, mut rx) = tokio::sync::mpsc::channel(512);
+
+        tokio::spawn(async move {
+            command_rx;
+            // put this in a callback and be done
+            tx.send(AppState::<WindowsDeviceCommunication>::new())
+                .await
+                .unwrap();
+        });
+
+        while let Some(value) = rx.recv().await {
+            *app_state.write() = value;
+        }
+    });
+
+    // TODO: make this readonly
+    (app_state, c)
+}
+
+pub fn start_actors() {}

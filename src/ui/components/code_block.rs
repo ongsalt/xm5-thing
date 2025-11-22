@@ -41,7 +41,7 @@ pub fn CodeBlock(title: String, code: Vec<CodeLine>) -> Element {
             ScrollView {
                 width: "100%",
                 padding: "6 0",
-                height: "240",
+                // height: "240",
 
                 for line in code {
                     rect {

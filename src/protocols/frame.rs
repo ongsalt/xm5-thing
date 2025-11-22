@@ -205,4 +205,25 @@ impl Frame {
 
         rx
     }
+
+    pub fn to_mdr_bytes_stream(
+        mut frame_rx: Receiver<Result<Frame, FrameParseError>>,
+    ) -> Receiver<u8> {
+        let (tx, rx) = tokio::sync::mpsc::channel(512);
+        tokio::spawn(async move {
+            while let Some(result) = frame_rx.recv().await {
+                if let Ok(frame) = result {
+                    for b in frame.content {
+                        tx.send(b).await.unwrap();
+                    }
+                } else {
+                    break;
+                    // TODO: error handling? close stream?
+                }
+            }
+            println!("Done frame_rx.is_closed:{}", frame_rx.is_closed());
+        });
+
+        rx
+    }
 }
