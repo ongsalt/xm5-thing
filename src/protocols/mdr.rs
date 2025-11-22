@@ -27,6 +27,7 @@ pub enum MDRPacketType {
     ConnectedDeviecesRet = 0x37,
     MultipointPinningSet = 0x38,
     MultipointActiveDeviceSet = 0x3C,
+    VolumeChangedNotify = 0xA9,
     Test = 0xFF, // its reserved for testing tho
 }
 
@@ -47,6 +48,7 @@ pub enum MDRPacket {
     ConnectedDeviecesRet(packet::ConnectedDeviecesRet),
     MultipointPinningSet(packet::MultipointPinningSet),
     MultipointActiveDeviceSet(packet::MultipointActiveDeviceSet),
+    VolumeChangedNotify(packet::VolumeChangedNotify),
     Unknown(packet::Unknown),
 }
 
@@ -96,6 +98,10 @@ impl MDRPacket {
             MDRPacketType::MultipointPinningSet => {
                 packet::MultipointPinningSet::from_bytes(payload)
                     .map(|(p, c)| (MDRPacket::MultipointPinningSet(p), c))
+            }
+            MDRPacketType::VolumeChangedNotify => {
+                packet::VolumeChangedNotify::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::VolumeChangedNotify(p), c))
             }
             _ => {
                 let (packet, size) = packet::Unknown::from_bytes(&payload);
@@ -379,6 +385,11 @@ pub mod packet {
         pub name: String,
     }
     #[derive(Debug, Clone)]
+    pub struct VolumeChangedNotify {
+        pub volume: u8,
+    }
+
+    #[derive(Debug, Clone)]
 
     pub struct Unknown {
         pub payload: Vec<u8>,
@@ -638,6 +649,18 @@ pub mod packet {
                     ))
                 }
             }
+        }
+    }
+
+    impl VolumeChangedNotify {
+        pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
+            if payload.len() < 3 {
+                return Err(PacketError::BufferTooShort);
+            }
+            // payload[0] is 0xA9 (type)
+            // payload[1] is 0x20 (fixed?)
+            // payload[2] is volume
+            Ok((VolumeChangedNotify { volume: payload[2] }, 3))
         }
     }
 }
