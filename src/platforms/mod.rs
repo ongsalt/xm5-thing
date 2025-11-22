@@ -35,6 +35,7 @@ impl Display for MacAddress {
 pub struct BluetoothDeviceInfo {
     pub name: String,
     pub address: MacAddress,
+    // device type?
 }
 
 impl Display for BluetoothDeviceInfo {

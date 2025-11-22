@@ -176,27 +176,29 @@ impl Frame {
     }
 
     pub fn from_byte_stream(
-        mut bytes_rx: Receiver<u8>,
+        mut bytes_rx: Receiver<Vec<u8>>,
     ) -> Receiver<Result<Frame, FrameParseError>> {
         let (tx, rx) = tokio::sync::mpsc::channel(512);
         tokio::spawn(async move {
             let mut buffer: Vec<u8> = vec![];
             let mut escape_next = false;
             println!("Waiting ");
-            while let Some(byte) = bytes_rx.recv().await {
-                // print!("{:02x} ", byte);
-                match byte {
-                    TANDEM_FRAME_START => {
-                        buffer.clear();
-                        buffer.push(TANDEM_FRAME_START);
-                    }
-                    TANDEM_FRAME_END => {
-                        buffer.push(TANDEM_FRAME_END);
-                        tx.send(Frame::try_from(buffer.as_slice())).await.unwrap();
-                    }
-                    TANDEM_ESCAPE => escape_next = true,
-                    _ => buffer.push(if escape_next { unescape(byte) } else { byte }),
-                };
+            while let Some(bytes) = bytes_rx.recv().await {
+                for byte in bytes {
+                    // print!("{:02x} ", byte);
+                    match byte {
+                        TANDEM_FRAME_START => {
+                            buffer.clear();
+                            buffer.push(TANDEM_FRAME_START);
+                        }
+                        TANDEM_FRAME_END => {
+                            buffer.push(TANDEM_FRAME_END);
+                            tx.send(Frame::try_from(buffer.as_slice())).await.unwrap();
+                        }
+                        TANDEM_ESCAPE => escape_next = true,
+                        _ => buffer.push(if escape_next { unescape(byte) } else { byte }),
+                    };
+                }
             }
             println!("Done (packet) bytes_rx.is_closed:{}", bytes_rx.is_closed());
         });

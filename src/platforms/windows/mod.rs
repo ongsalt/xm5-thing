@@ -1,5 +1,4 @@
-use super::traits::ServiceHandler;
-use crate::{platforms::utils::U8ArrayExtension, constant::SONY_SOME_SERVICE_UUID};
+use crate::platforms::{traits::DeviceCommunication, utils::U8ArrayExtension};
 use anyhow::{bail, Ok, Result};
 use windows::{
     core::GUID,
@@ -15,22 +14,22 @@ use winrt::GuidExtension;
 pub mod winrt;
 
 #[derive(Debug, Clone)]
-pub struct WindowsServiceHandler {
-    pub service: RfcommDeviceService,
-    pub data_reader: DataReader,
+pub struct WindowsDeviceCommunication {
+    service: RfcommDeviceService,
+    data_reader: DataReader,
     data_writer: DataWriter,
     socket: StreamSocket,
 }
 
-impl WindowsServiceHandler {
-    pub async fn new(service_id: &str) -> Result<WindowsServiceHandler> {
+impl WindowsDeviceCommunication {
+    pub async fn new(service_id: &str) -> Result<WindowsDeviceCommunication> {
         let id = RfcommServiceId::FromUuid(GUID::parse(service_id)?)?;
         let device_class = RfcommDeviceService::GetDeviceSelector(&id)?;
         let mut services: Vec<DeviceInformation> =
             DeviceInformation::FindAllAsyncAqsFilter(&device_class)?
                 .await?
                 .into_iter()
-                .collect::<Vec<_>>();
+                .collect();
 
         let service = services.pop().unwrap();
         let service = RfcommDeviceService::FromIdAsync(&service.Id()?)?.await?;
@@ -61,35 +60,42 @@ impl WindowsServiceHandler {
     }
 }
 
-impl ServiceHandler for WindowsServiceHandler {
-    async fn send(&self, buffer: &[u8]) -> Result<()> {
-        self.data_writer.WriteBytes(buffer)?;
-        self.data_writer.StoreAsync()?;
-
-        println!("sent {}: [{}]", buffer.len(), buffer.format_as_hex());
-        Ok(())
-    }
-
-    fn receive_rx(&self) -> Result<tokio::sync::mpsc::Receiver<u8>> {
-        // should this block???
-        println!("Receive rx");
-        let (tx, rx) = tokio::sync::mpsc::channel(1024);
-        let data_reader = self.data_reader.clone();
+impl DeviceCommunication for WindowsDeviceCommunication {
+    fn tx(&self) -> tokio::sync::mpsc::Sender<Vec<u8>> {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(24);
+        let data_writer = self.data_writer.clone();
 
         tokio::spawn(async move {
-            loop {
-                let size = data_reader.LoadAsync(512).unwrap().await.unwrap() as usize;
-                // println!("Got message size: {size}");
-                for _ in 0..size {
-                    tx.send(data_reader.ReadByte().unwrap()).await.unwrap();
-                }
+            while let Some(value) = rx.recv().await {
+                data_writer.WriteBytes(&value).unwrap();
+                data_writer.StoreAsync().unwrap().await.unwrap();
+                let left = data_writer.UnstoredBufferLength().unwrap();
+                println!("left: {left}");
             }
         });
 
-        Ok(rx)
+        tx
     }
 
-    async fn close(&mut self) {
-        todo!()
+    fn rx(&self) -> tokio::sync::mpsc::Receiver<Vec<u8>> {
+        let (tx, rx) = tokio::sync::mpsc::channel(24);
+        let data_reader = self.data_reader.clone();
+
+        tokio::spawn(async move {
+            let mut buffer = [0u8; 512];
+            loop {
+                let size = data_reader.LoadAsync(512).unwrap().await.unwrap() as usize;
+                // println!("Got message size: {size}");
+                data_reader.ReadBytes(&mut buffer[0..size]).unwrap();
+                tx.send(buffer[0..size].to_vec()).await.unwrap();
+                // buffer = [0u8; 512]
+            }
+        });
+
+        rx
+    }
+
+    fn close(&self) {
+        self.socket.Close().unwrap();
     }
 }

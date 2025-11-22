@@ -1,6 +1,10 @@
 use crate::{
-    platforms::{traits::ServiceHandler, utils::U8ArrayExtension, windows::WindowsServiceHandler},
     constant::SONY_SOME_SERVICE_UUID,
+    platforms::{
+        traits::{DeviceCommunication, ServiceHandler},
+        utils::U8ArrayExtension,
+        windows::WindowsDeviceCommunication,
+    },
     protocols::frame::Frame,
     ui::components::code_block::{CodeBlock, CodeLine},
 };
@@ -10,7 +14,6 @@ use futures::StreamExt;
 
 // wtf did i just wrote
 pub fn app() -> Element {
-    println!("[root] Rerun");
     let mut log: Signal<Vec<CodeLine>> = use_signal(|| vec![]);
     let mut add_log = move |content: String| {
         log.write()
@@ -20,13 +23,14 @@ pub fn app() -> Element {
     let mut is_initialized = use_signal(|| false);
 
     let service: Coroutine<()> = use_coroutine(move |mut rx| async move {
-        let mut service: WindowsServiceHandler = WindowsServiceHandler::new(SONY_SOME_SERVICE_UUID)
+        let mut service = WindowsDeviceCommunication::new(SONY_SOME_SERVICE_UUID)
             .await
             .unwrap();
         *is_initialized.write() = true;
         add_log("Initiliazed client".into());
 
-        let service_rx = service.receive_rx().unwrap();
+        let service_rx = service.rx();
+        let service_tx = service.tx();
 
         spawn(async move {
             let mut frames = Frame::from_byte_stream(service_rx);
@@ -39,7 +43,7 @@ pub fn app() -> Element {
                 let ack: Frame = Frame::new_ack(frame.sequence_number);
                 let payload: Vec<u8> = (&ack).into();
                 add_log(format!("sent {}", payload.format_as_hex()));
-                service.send(&payload).await.unwrap();
+                service_tx.send(payload).await.unwrap();
             }
             println!("Done")
         });
