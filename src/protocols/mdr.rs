@@ -3,7 +3,10 @@ use std::io::BufReader;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use tokio::sync::mpsc::Receiver;
 
-use crate::protocols::{frame::Frame, mdr::packet::ConnectedDeviecesRet};
+use crate::protocols::{
+    frame::{Frame, FrameDataType},
+    mdr::packet::{ConnectedDeviecesRet, PacketError},
+};
 
 // TODO: find this
 #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
@@ -24,6 +27,7 @@ pub enum MDRPacketType {
     ConnectedDeviecesRet = 0x37,
     MultipointPinningSet = 0x38,
     MultipointActiveDeviceSet = 0x3C,
+    Test = 0xFF, // its reserved for testing tho
 }
 
 #[derive(Debug, Clone)]
@@ -43,74 +47,82 @@ pub enum MDRPacket {
     ConnectedDeviecesRet(packet::ConnectedDeviecesRet),
     MultipointPinningSet(packet::MultipointPinningSet),
     MultipointActiveDeviceSet(packet::MultipointActiveDeviceSet),
+    Unknown(packet::Unknown),
 }
 
 impl MDRPacket {
-    fn from_frame_stream(mut frame_rx: Receiver<Frame>) -> Receiver<MDRPacket> {
+    // TODO: make this a result
+    pub fn from_frame(frame: Frame) -> Vec<MDRPacket> {
+        if frame.content.is_empty() || frame.data_type != FrameDataType::DataMdr {
+            return vec![];
+        }
+
+        let packet_type = MDRPacketType::try_from(frame.content[0]).unwrap_or(MDRPacketType::Test);
+
+        let payload = &frame.content;
+        let result: Result<(MDRPacket, usize), PacketError> = match packet_type {
+            MDRPacketType::ConnectRetProtocolInfo => {
+                packet::ConnectRetProtocolInfo::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::ConnectRetProtocolInfo(p), c))
+            }
+            MDRPacketType::ConnectRetCapabilityInfo => {
+                packet::ConnectRetCapabilityInfo::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::ConnectRetCapabilityInfo(p), c))
+            }
+            MDRPacketType::ConnectRetDeviceInfo => {
+                packet::ConnectRetDeviceInfo::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::ConnectRetDeviceInfo(p), c))
+            }
+            MDRPacketType::ConnectRetSupportFunction => {
+                packet::ConnectRetSupportFunction::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::ConnectRetSupportFunction(p), c))
+            }
+            MDRPacketType::CommonRetBatteryLevel => {
+                packet::CommonRetBatteryLevel::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::CommonRetBatteryLevel(p), c))
+            }
+            MDRPacketType::CommonNtfyBatteryLevel => {
+                packet::CommonNtfyBatteryLevel::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::CommonNtfyBatteryLevel(p), c))
+            }
+            MDRPacketType::ConnectedDeviecesRet => {
+                packet::ConnectedDeviecesRet::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::ConnectedDeviecesRet(p), c))
+            }
+            MDRPacketType::MultipointActiveDeviceSet => {
+                packet::MultipointActiveDeviceSet::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::MultipointActiveDeviceSet(p), c))
+            }
+            MDRPacketType::MultipointPinningSet => {
+                packet::MultipointPinningSet::from_bytes(payload)
+                    .map(|(p, c)| (MDRPacket::MultipointPinningSet(p), c))
+            }
+            _ => {
+                let (packet, size) = packet::Unknown::from_bytes(&payload);
+                Ok((MDRPacket::Unknown(packet), size))
+            }
+        };
+
+        // TODO: match multiple time
+        match result {
+            Ok((packet, size)) => {
+                vec![packet]
+            }
+            Err(e) => {
+                println!("Error parsing packet: {}", e);
+                vec![]
+            }
+        }
+    }
+
+    pub fn from_frame_stream(mut frame_rx: Receiver<Frame>) -> Receiver<MDRPacket> {
         let (tx, rx) = tokio::sync::mpsc::channel(512);
         tokio::spawn(async move {
             while let Some(frame) = frame_rx.recv().await {
-                if frame.content.is_empty() {
-                    continue;
-                }
+                let packets = MDRPacket::from_frame(frame);
 
-                let Ok(packet_type) = MDRPacketType::try_from(frame.content[0]) else {
-                    // dont close the stream, just ignore
-                    continue;
-                };
-
-                let payload = &frame.content;
-                let packet: Result<MDRPacket, packet::PacketError> = match packet_type {
-                    MDRPacketType::ConnectRetProtocolInfo => {
-                        packet::ConnectRetProtocolInfo::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::ConnectRetProtocolInfo(p))
-                    }
-                    MDRPacketType::ConnectRetCapabilityInfo => {
-                        packet::ConnectRetCapabilityInfo::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::ConnectRetCapabilityInfo(p))
-                    }
-                    MDRPacketType::ConnectRetDeviceInfo => {
-                        packet::ConnectRetDeviceInfo::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::ConnectRetDeviceInfo(p))
-                    }
-                    MDRPacketType::ConnectRetSupportFunction => {
-                        packet::ConnectRetSupportFunction::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::ConnectRetSupportFunction(p))
-                    }
-                    MDRPacketType::CommonRetBatteryLevel => {
-                        packet::CommonRetBatteryLevel::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::CommonRetBatteryLevel(p))
-                    }
-                    MDRPacketType::CommonNtfyBatteryLevel => {
-                        packet::CommonNtfyBatteryLevel::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::CommonNtfyBatteryLevel(p))
-                    }
-                    MDRPacketType::ConnectedDeviecesRet => {
-                        packet::ConnectedDeviecesRet::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::ConnectedDeviecesRet(p))
-                    }
-                    MDRPacketType::MultipointActiveDeviceSet => {
-                        packet::MultipointActiveDeviceSet::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::MultipointActiveDeviceSet(p))
-                    }
-                    MDRPacketType::MultipointPinningSet => {
-                        packet::MultipointPinningSet::from_bytes(payload)
-                            .map(|(p, _)| MDRPacket::MultipointPinningSet(p))
-                    }
-                    _ => Err(packet::PacketError::UnimplementedPacketType(
-                        packet_type.into(),
-                    )),
-                };
-
-                match packet {
-                    Ok(p) => {
-                        if tx.send(p).await.is_err() {
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        println!("Error parsing packet: {}", e);
-                    }
+                for packet in packets {
+                    tx.send(packet).await.unwrap();
                 }
             }
             println!("Done (mdr) frame_rx.is_closed:{}", frame_rx.is_closed());
@@ -142,6 +154,7 @@ pub mod packet {
     use num_enum::{IntoPrimitive, TryFromPrimitive};
     use std::fmt;
 
+    // TODO: check v2, this is probably v1
     #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, PartialEq, Eq)]
     #[repr(u8)]
     pub enum DeviceInfoInquiredType {
@@ -333,8 +346,6 @@ pub mod packet {
         }
     }
 
-
-
     #[repr(C)]
     #[derive(Debug, Clone)]
     pub struct ConnectedDeviecesGet {
@@ -367,8 +378,25 @@ pub mod packet {
         pub flags: u32,
         pub name: String,
     }
+    #[derive(Debug, Clone)]
+
+    pub struct Unknown {
+        pub payload: Vec<u8>,
+    }
+
+    impl Unknown {
+        pub fn from_bytes(payload: &[u8]) -> (Self, usize) {
+            (
+                Unknown {
+                    payload: payload.to_vec(),
+                },
+                payload.len(),
+            )
+        }
+    }
 
     impl MultipointActiveDeviceSet {
+        // I should make this a trait
         pub fn from_bytes(payload: &[u8]) -> Result<(Self, usize), PacketError> {
             if payload.len() < 19 {
                 return Err(PacketError::BufferTooShort);
@@ -526,10 +554,7 @@ pub mod packet {
                         .map_err(|_| PacketError::InvalidPacketBody(payload[1]))?;
                     let color = ModelColor::try_from(payload[2])
                         .map_err(|_| PacketError::InvalidPacketBody(payload[2]))?;
-                    Ok((
-                        ConnectRetDeviceInfo::SeriesAndColorInfo(series, color),
-                        3,
-                    ))
+                    Ok((ConnectRetDeviceInfo::SeriesAndColorInfo(series, color), 3))
                 }
                 DeviceInfoInquiredType::InstructionGuide => {
                     let len = payload[1] as usize;

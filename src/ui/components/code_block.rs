@@ -1,22 +1,10 @@
 use freya::prelude::*;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct CodeLine {
-    pub prefix: String,
-    pub content: String,
-}
+use crate::ui::state::Log;
 
-impl CodeLine {
-    pub fn new(prefix: String, content: String) -> Self {
-        Self {
-            prefix,
-            content
-        }
-    }
-}
 
 #[component]
-pub fn CodeBlock(title: String, code: Vec<CodeLine>) -> Element {
+pub fn CodeBlock(title: String, code: Vec<Log>) -> Element {
     rsx!(
         rect {
             width: "100%",
@@ -54,10 +42,10 @@ pub fn CodeBlock(title: String, code: Vec<CodeLine>) -> Element {
                         label {
                             font_weight: "medium",
 
-                            "{line.prefix}"
+                            "{line.timestamp.to_string()}"
                         }
                         label {
-                            "{line.content}"
+                            "{line.message}"
                         }
                     }
                 }

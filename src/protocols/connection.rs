@@ -5,12 +5,14 @@ use crate::{
     platforms::{traits::DeviceCommunication, BluetoothDeviceInfo, MacAddress},
     protocols::{
         frame::Frame,
+        mdr::{packet, MDRPacket},
         properties::{self, HeadphoneProperties},
     },
 };
 
+#[derive(Debug, Clone)]
 pub struct HeadphoneConnection<D: DeviceCommunication> {
-    device_info: BluetoothDeviceInfo,
+    // device_info: BluetoothDeviceInfo,
     properties: HeadphoneProperties,
     communication: D,
 }
@@ -26,37 +28,44 @@ pub enum HeadphoneAppCommand {
 // exposed event on_property_change to ui
 
 impl<D: DeviceCommunication> HeadphoneConnection<D> {
-    async fn new(device_info: BluetoothDeviceInfo, mut communication: D) -> Self {
+    pub async fn new(mut communication: D) -> Self {
+        // pub async fn new(device_info: BluetoothDeviceInfo, mut communication: D) -> Self {
         let properties = HeadphoneProperties::new(&mut communication).await;
 
         Self {
-            device_info,
+            // device_info,
             properties,
             communication,
         }
     }
 
-    async fn send(&mut self, command: HeadphoneAppCommand) {
+    pub async fn send(&mut self, command: HeadphoneAppCommand) {
         let value = vec![];
         self.communication.tx().send(value).await.unwrap();
     }
 
     // TODO: make this callable only once
-    fn properties_rx(&self) -> Receiver<HeadphoneProperties> {
+    pub fn properties_rx(&self) -> Receiver<HeadphoneProperties> {
         let (tx, rx) = tokio::sync::mpsc::channel(24);
         // this shit again...
         let byte_rx = self.communication.rx();
         let mut frame_rx = Frame::from_byte_stream(byte_rx);
-        // let mut mdr_rx = Frame::to_mdr_bytes_stream(frame_rx);
-        let mut packet_rx = ();
+        let communication_tx = self.communication.tx();
 
-        let mut p: HeadphoneProperties = self.properties.clone();
+        let ack = async move |seq| {
+            let frame = Frame::new_ack(seq);
+            communication_tx.send(frame.into()).await.unwrap();
+        };
+
+        let p: HeadphoneProperties = self.properties.clone();
 
         tokio::spawn(async move {
-            while let Some(result) = frame_rx.recv().await {
-                if let Ok(frame) = result {
-                    // p.update(packet);
-                    println!("{}", frame);
+            while let Some(frame) = frame_rx.recv().await {
+                println!(" 𐘀 {:.?}", frame);
+                ack(frame.sequence_number).await;
+                let packets = MDRPacket::from_frame(frame);
+                for packet in packets {
+                    println!("   𐘀 {:.?}", packet);
                     tx.send(p).await.unwrap();
                 }
             }

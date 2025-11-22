@@ -2,6 +2,8 @@ use anyhow::Result;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 
+use crate::platforms::MacAddress;
+
 use super::BluetoothDeviceInfo;
 
 pub trait BluetoothAdapter {

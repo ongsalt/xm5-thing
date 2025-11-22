@@ -30,7 +30,7 @@ pub fn escape(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
-#[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum FrameDataType {
     Data = 0x00,
@@ -57,7 +57,7 @@ impl Display for FrameDataType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Frame {
     pub data_type: FrameDataType,
     pub sequence_number: u8,
@@ -126,7 +126,7 @@ impl TryFrom<&[u8]> for Frame {
     }
 }
 
-impl Into<Vec<u8>> for &Frame {
+impl Into<Vec<u8>> for Frame {
     fn into(self) -> Vec<u8> {
         let mut payload: Vec<u8> = vec![self.data_type.into(), self.sequence_number];
 
@@ -175,9 +175,7 @@ impl Frame {
             .wrapping_add(self.content.len() as u8)
     }
 
-    pub fn from_byte_stream(
-        mut bytes_rx: Receiver<Vec<u8>>,
-    ) -> Receiver<Result<Frame, FrameParseError>> {
+    pub fn from_byte_stream(mut bytes_rx: Receiver<Vec<u8>>) -> Receiver<Frame> {
         let (tx, rx) = tokio::sync::mpsc::channel(512);
         tokio::spawn(async move {
             let mut buffer: Vec<u8> = vec![];
@@ -193,7 +191,11 @@ impl Frame {
                         }
                         TANDEM_FRAME_END => {
                             buffer.push(TANDEM_FRAME_END);
-                            tx.send(Frame::try_from(buffer.as_slice())).await.unwrap();
+                            let Ok(frame) = Frame::try_from(buffer.as_slice()) else {
+                                // TODO: close stream
+                                break;
+                            };
+                            tx.send(frame).await.unwrap();
                         }
                         TANDEM_ESCAPE => escape_next = true,
                         _ => buffer.push(if escape_next { unescape(byte) } else { byte }),

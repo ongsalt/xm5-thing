@@ -1,6 +1,6 @@
 use crate::platforms::{traits::DeviceCommunication, utils::U8ArrayExtension};
 use anyhow::{bail, Ok, Result};
-use tokio::sync::mpsc::{Receiver, Sender, channel};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use windows::{
     core::GUID,
     Devices::{
@@ -68,6 +68,7 @@ impl DeviceCommunication for WindowsDeviceCommunication {
 
         tokio::spawn(async move {
             while let Some(value) = rx.recv().await {
+                // println!("write: {}", value.format_as_hex());
                 data_writer.WriteBytes(&value).unwrap();
                 data_writer.StoreAsync().unwrap().await.unwrap();
             }
@@ -84,9 +85,9 @@ impl DeviceCommunication for WindowsDeviceCommunication {
             let mut buffer = [0u8; 512];
             loop {
                 let size = data_reader.LoadAsync(512).unwrap().await.unwrap() as usize;
-                // println!("Got message size: {size}");
                 data_reader.ReadBytes(&mut buffer[0..size]).unwrap();
                 tx.send(buffer[0..size].to_vec()).await.unwrap();
+                // println!("received: {}", buffer[0..size].format_as_hex());
                 // buffer = [0u8; 512]
             }
         });
