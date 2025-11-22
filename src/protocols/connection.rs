@@ -2,10 +2,10 @@ use serde::Serialize;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{
-    platforms::{traits::DeviceCommunication, BluetoothDeviceInfo, MacAddress},
+    platforms::{BluetoothDeviceInfo, MacAddress, traits::DeviceCommunication},
     protocols::{
-        frame::Frame,
-        mdr::{packet, MDRPacket},
+        frame::{Frame, FrameDataType},
+        mdr::{BatteryInquiredType, MDRPacket},
         properties::{self, HeadphoneProperties},
     },
 };
@@ -45,6 +45,7 @@ impl<D: DeviceCommunication> HeadphoneConnection<D> {
     }
 
     // TODO: make this callable only once
+    // we should start this immediately once new'ed
     pub fn properties_rx(&self) -> Receiver<HeadphoneProperties> {
         let (tx, rx) = tokio::sync::mpsc::channel(24);
         // this shit again...
@@ -57,11 +58,28 @@ impl<D: DeviceCommunication> HeadphoneConnection<D> {
             communication_tx.send(frame.into()).await.unwrap();
         };
 
+        let communication_tx = self.communication.tx();
         let p: HeadphoneProperties = self.properties.clone();
 
         tokio::spawn(async move {
+            let mut seq = 0;
+            let mut send = async |packet: MDRPacket| {
+                let Some(bytes) = packet.to_bytes() else {
+                    println!("Unsupported {packet:.?}");
+                    return;
+                };
+                // TODO: listen for ack
+                let frame = Frame::new(FrameDataType::DataMdr, seq, &bytes);
+                seq ^= 1;
+                communication_tx.send(frame.into()).await.unwrap();
+            };
+
+            send(MDRPacket::ConnectGetProtocolInfo).await;
+            send(MDRPacket::ConnectedDeviecesGet { b1: 0x02 }).await;
+
+
             while let Some(frame) = frame_rx.recv().await {
-                println!(" 𐘀 {:.?}", frame);
+                println!(" 𐘀 {}", frame);
                 ack(frame.sequence_number).await;
                 let packets = MDRPacket::from_frame(frame);
                 for packet in packets {
