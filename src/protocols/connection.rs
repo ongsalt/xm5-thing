@@ -2,7 +2,7 @@ use serde::Serialize;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{
-    platforms::{BluetoothDeviceInfo, MacAddress, traits::DeviceCommunication},
+    platforms::{traits::DeviceCommunication, BluetoothDeviceInfo, MacAddress},
     protocols::{
         frame::{Frame, FrameDataType},
         mdr::{BatteryInquiredType, MDRPacket},
@@ -40,7 +40,7 @@ impl<D: DeviceCommunication> HeadphoneConnection<D> {
     }
 
     pub async fn send(&mut self, command: HeadphoneAppCommand) {
-        let value = vec![];
+        let value = vec![0];
         self.communication.tx().send(value).await.unwrap();
     }
 
@@ -59,7 +59,6 @@ impl<D: DeviceCommunication> HeadphoneConnection<D> {
         };
 
         let communication_tx = self.communication.tx();
-        let p: HeadphoneProperties = self.properties.clone();
 
         tokio::spawn(async move {
             let mut seq = 0;
@@ -77,13 +76,15 @@ impl<D: DeviceCommunication> HeadphoneConnection<D> {
             send(MDRPacket::ConnectGetProtocolInfo).await;
             send(MDRPacket::ConnectedDeviecesGet { b1: 0x02 }).await;
 
-
             while let Some(frame) = frame_rx.recv().await {
                 println!(" 𐘀 {}", frame);
                 ack(frame.sequence_number).await;
                 let packets = MDRPacket::from_frame(frame);
                 for packet in packets {
                     println!("   𐘀 {:.?}", packet);
+                    let p = HeadphoneProperties {
+                        placeholder_text: format!("{:.?}", packet).to_owned(),
+                    };
                     tx.send(p).await.unwrap();
                 }
             }

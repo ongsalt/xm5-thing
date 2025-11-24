@@ -1,7 +1,7 @@
 ## Todos
 - ~~parse tandem frame~~
 - ~~properly ack~~
-- nuke `ServiceHandler`
+- ~~nuke `ServiceHandler`~~
 - cancelation, error handling
 - stop doing too much from ui side
 - parse mdr packet (a lot)

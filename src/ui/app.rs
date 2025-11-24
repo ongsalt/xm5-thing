@@ -17,7 +17,7 @@ pub fn app() -> Element {
             label {
                 font_size: "24",
 
-                "Some stupid client"
+                "Some text"
             }
 
             if is_initialized() {

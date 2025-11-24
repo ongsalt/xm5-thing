@@ -5,12 +5,12 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-freya = "0.3.0-rc.1"
+freya = "0.3.4"
 winit = "*"
-dioxus = { version = "0.5", features = [
-    "macro",
-    "hooks",
-], default-features = false }
+# dioxus = { version = "0.7", features = [
+#     "macro",
+#     "hooks",
+# ], default-features = false }
 windows = { version = "0.59.0", features = [
     "Foundation_Collections",
     "Devices",

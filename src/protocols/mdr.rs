@@ -18,8 +18,8 @@ pub enum MDRPacketType {
     ConnectGetSupportFunction = 0x06,
     CommonNtfyBatteryLevel = 0x13,
     ConnectedDeviecesGet = 0x36,
-    ConnectedDeviecesRet = 0x37,
     MultipointPinningSet = 0x38,
+    ConnectedDeviecesRet = 0x39, //??/
     MultipointActiveDeviceSet = 0x3C,
     VolumeChangedNotify = 0xA9,
     Test = 0xFF, // its reserved for testing tho
